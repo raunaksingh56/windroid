@@ -6,7 +6,6 @@
  */
 
 package com.raunaksingh.windroid.ui.screens
-import androidx.compose.material3.HorizontalDivider
 
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -301,7 +300,7 @@ fun WindowsVersionCard(
 
                 // Expanded version options
                 if (expanded) {
-                    HorizontalDivider(color = NavyBorder, thickness = 1.dp)
+                    Divider(color = NavyBorder, thickness = 1.dp)
                     Spacer(Modifier.height(4.dp))
 
                     WindowsVersion.values().forEach { version ->
