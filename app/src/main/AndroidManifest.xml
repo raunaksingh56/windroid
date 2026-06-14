@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  WinDroid - Bootable Windows USB Creator
+  Created by Raunak Singh
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.raunaksingh.windroid">
+
+    <!-- USB Host — required for USB OTG write (rootless) -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="true" />
+
+    <!-- Storage — for reading ISO from device -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <!-- Foreground service — keep flash running when screen off -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:label="WinDroid"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:theme="@style/Theme.WinDroid"
+        android:supportsRtl="true"
+        android:hardwareAccelerated="true">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Auto-launch when USB OTG plugged in -->
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/device_filter" />
+        </activity>
+
+        <!-- Foreground service for long flash operations -->
+        <service
+            android:name=".core.FlashForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+    </application>
+</manifest>

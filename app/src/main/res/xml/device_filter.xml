@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- WinDroid - USB Device Filter | Created by Raunak Singh -->
+<!-- Match any USB Mass Storage device (class 0x08) -->
+<resources>
+    <usb-device class="0x08" />
+</resources>
