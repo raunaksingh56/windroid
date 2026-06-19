@@ -1,27 +1,21 @@
-<div align="center">
-
 ```
-██╗    ██╗██╗███╗   ██╗██████╗ ██████╗  ██████╗ ██╗██████╗ 
+██╗    ██╗██╗███╗   ██╗██████╗ ██████╗  ██████╗ ██╗██████╗
 ██║    ██║██║████╗  ██║██╔══██╗██╔══██╗██╔═══██╗██║██╔══██╗
 ██║ █╗ ██║██║██╔██╗ ██║██║  ██║██████╔╝██║   ██║██║██║  ██║
 ██║███╗██║██║██║╚██╗██║██║  ██║██╔══██╗██║   ██║██║██║  ██║
 ╚███╔███╔╝██║██║ ╚████║██████╔╝██║  ██║╚██████╔╝██║██████╔╝
- ╚══╝╚══╝ ╚═╝╚═╝  ╚═══╝╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚═╝╚═════╝ 
+ ╚══╝╚══╝ ╚═╝╚═╝  ╚═══╝╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚═╝╚═════╝
 ```
 
 **Flash Windows to USB — straight from your Android phone**
 
 [![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-1.9-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org)
-[![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=for-the-badge)](LICENSE)
-[![No Root](https://img.shields.io/badge/Root-Not%20Required-success?style=for-the-badge)](/)
-[![Windows](https://img.shields.io/badge/Windows-XP%20→%2011-0078D4?style=for-the-badge&logo=windows&logoColor=white)](/)
-
-<br/>
+[![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=for-the-badge)](https://github.com/raunaksingh56/windroid/blob/main/LICENSE)
+[![No Root](https://img.shields.io/badge/Root-Not%20Required-success?style=for-the-badge)](https://github.com/raunaksingh56/windroid/blob/main)
+[![Windows](https://img.shields.io/badge/Windows-XP%20%E2%86%92%2011-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/raunaksingh56/windroid/blob/main)
 
 > *No PC. No root. No BIOS fiddling. Just your phone and a USB drive.*
-
-</div>
 
 ---
 
@@ -31,13 +25,21 @@
 
 **Supports every modern Windows version:**
 
-| Version | Answer File | Notes |
-|---------|-------------|-------|
-| 🪟 Windows XP | `winnt.sif` | Legacy text-format, full unattend |
-| 🪟 Windows 7 | `autounattend.xml` | ei.cfg injection, activation skip |
-| 🪟 Windows 8 / 8.1 | `autounattend.xml` | Online account bypass, SmartScreen off |
-| 🪟 Windows 10 | `autounattend.xml` | Telemetry & Cortana disable |
-| 🪟 Windows 11 | `autounattend.xml` | Full TPM / SecureBoot / RAM bypass |
+| Version           | Answer File        | Notes                                  |
+| ----------------- | ------------------ | --------------------------------------- |
+| 🪟 Windows XP      | `winnt.sif`        | Legacy text-format, full unattend       |
+| 🪟 Windows 7       | `autounattend.xml` | ei.cfg injection, activation skip       |
+| 🪟 Windows 8 / 8.1 | `autounattend.xml` | Online account bypass, SmartScreen off  |
+| 🪟 Windows 10      | `autounattend.xml` | Telemetry & Cortana disable, offline setup |
+| 🪟 Windows 11      | `autounattend.xml` | Full TPM / SecureBoot / RAM bypass, offline setup |
+
+---
+
+## 🆕 Recent Changes
+
+- **Added** — Bypass the Windows 10/11 "you need an internet connection" requirement (`BypassNRO`). Previously, *Skip Microsoft Account* only hid the account-creation screen; Setup still blocked progress until you connected to a network. Now Setup is patched at the WinPE stage so fully offline, local-account installs actually work.
+- **Fixed** — `ei.cfg` (Windows 7/8 edition override) was being generated correctly but never written to the USB drive — only `autounattend.xml` was ever flashed. All generated answer files are now written.
+- **Fixed** — USB directory creation could fail or create duplicate folders (e.g. `sources/`) when writing nested files like `sources/ei.cfg` onto a directory structure the ISO extraction already created.
 
 ---
 
@@ -64,43 +66,40 @@
 - ✅ **Windows XP** — generates `winnt.sif`, optional auto-format, product key entry
 - ✅ **Windows 7** — `autounattend.xml` + `ei.cfg` edition selection, activation skip
 - ✅ **Windows 8 / 8.1** — online account bypass, SmartScreen disable, ei.cfg
-- ✅ **Windows 10** — full unattend, telemetry disable, Cortana off
-- ✅ **Windows 11** — TPM 2.0 bypass, Secure Boot bypass, RAM & CPU bypass
+- ✅ **Windows 10** — full unattend, telemetry disable, Cortana off, offline account setup
+- ✅ **Windows 11** — TPM 2.0 bypass, Secure Boot bypass, RAM & CPU bypass, offline account setup
 
 ### Unattended Setup Tweaks
 
-<details>
-<summary><b>👤 Account</b></summary>
+**👤 Account**
 
 - Skip Microsoft Account — local account, no internet required
 - Custom username & password
 - Auto-login on first boot
 - Skip password hint
 
-</details>
+**🌐 Windows 10 / 11 Online Requirement Bypass**
 
-<details>
-<summary><b>🛡️ Windows 11 Bypasses</b></summary>
+- Bypass internet connection requirement during OOBE (`BypassNRO`)
+- Patches `LabConfig\BypassNRO` and `BypassNROCheck` at the WinPE stage — not just a hidden UI screen
+- Forces a local-account path even with no network adapter connected
+- Applies to Windows 10 (2004+) and Windows 11
+
+**🛡️ Windows 11 Hardware Bypasses**
 
 - Bypass TPM 2.0 check
 - Bypass Secure Boot check
 - Bypass RAM check (< 4 GB)
 - Bypass CPU compatibility check
 
-</details>
-
-<details>
-<summary><b>🔒 Privacy</b></summary>
+**🔒 Privacy**
 
 - Disable telemetry from day 1
 - Disable Cortana (Win 10/11)
 - Disable data collection
 - Disable Advertising ID
 
-</details>
-
-<details>
-<summary><b>⚙️ Setup</b></summary>
+**⚙️ Setup**
 
 - Skip EULA screen
 - Skip privacy questions
@@ -108,29 +107,24 @@
 - Choose Windows edition (Home / Pro / Enterprise / Education)
 - **ei.cfg injection** to bypass edition picker (Win 7+)
 
-</details>
-
-<details>
-<summary><b>🪟 XP-Specific</b></summary>
+**🪟 XP-Specific**
 
 - Product key entry
 - Auto-format & partition (optional)
 - OEM name / organization
 - Disable MSN Messenger, IE integration
 
-</details>
-
 ---
 
 ## 📦 Requirements
 
-| Requirement | Minimum |
-|-------------|---------|
-| Android | 8.0+ (API 26) |
-| RAM | 2 GB recommended |
-| USB OTG | Required |
-| USB Drive | ≥ 8 GB |
-| Windows ISO | XP, 7, 8, 8.1, 10, or 11 |
+| Requirement | Minimum                  |
+| ----------- | ------------------------ |
+| Android     | 8.0+ (API 26)             |
+| RAM         | 2 GB recommended          |
+| USB OTG     | Required                  |
+| USB Drive   | ≥ 8 GB                    |
+| Windows ISO | XP, 7, 8, 8.1, 10, or 11  |
 
 ---
 
@@ -146,7 +140,7 @@ Step 1 ──► Step 2 ──► Step 3 ──► Step 4 ──► Step 5
 3. Tap **Select ISO** → pick your Windows ISO file
 4. Tap **Select USB** → pick the OTG drive
 5. Tap **Windows Version** → pick XP / 7 / 8 / 10 / 11 (or leave on Auto-Detect)
-6. Configure tweaks (optional — defaults work great)
+6. Configure tweaks (optional — defaults work great, including offline account setup on 10/11)
 7. Tap **Flash Windows to USB**
 8. Plug USB into your PC → boot → Windows installs automatically!
 
@@ -167,6 +161,7 @@ ISO file
 ```
 
 WinDroid implements ISO 9660 parsing entirely in Kotlin:
+
 - Reads the **Primary Volume Descriptor** at sector 16
 - Detects **Joliet extensions** (sector 17+) for Unicode long filenames
 - Walks the directory tree recursively
@@ -187,12 +182,26 @@ install.wim (5.2 GB)
 Different Windows versions need different answer files:
 
 ```
-Windows XP  →  winnt.sif       (INI format, placed in ISO root)
+Windows XP  →  winnt.sif        (INI format, placed in ISO root)
 Windows 7+  →  autounattend.xml (XML schema, placed in USB root)
 Windows 7+  →  sources/ei.cfg   (optional edition override)
 ```
 
-WinDroid generates all required files automatically based on your version selection.
+WinDroid generates **and writes** all required files automatically based on your version selection.
+
+### Online Account / Network Requirement Bypass (Win 10 / 11)
+
+```
+WinPE pass
+  └── RunSynchronousCommand
+        ├── reg add LabConfig /v BypassNRO      /d 1
+        └── reg add LabConfig /v BypassNROCheck /d 1
+
+oobeSystem pass
+  └── NetworkLocation = Home
+```
+
+Hiding the online-account screen alone doesn't stop Setup from requiring a network connection — `BypassNRO` patches the actual gate, the same way the existing TPM/CPU/RAM checks are bypassed.
 
 ### Dual Boot (UEFI + BIOS)
 
@@ -209,7 +218,7 @@ USB Drive
 ## 🏗️ Building from Source
 
 ```bash
-git clone https://github.com/raunaksingh/windroid
+git clone https://github.com/raunaksingh56/windroid
 cd windroid
 ./gradlew assembleDebug
 ```
@@ -227,19 +236,19 @@ app/src/main/kotlin/com/raunaksingh/windroid/
 │
 ├── core/
 │   ├── IsoExtractor.kt               # ✨ Full ISO 9660 + Joliet parser
-│   ├── UsbWriter.kt                  # Rootless USB write via SAF
+│   ├── UsbWriter.kt                  # Rootless USB write via SAF — writes all answer files
 │   ├── HybridBootManager.kt          # UEFI + Legacy BIOS boot setup
 │   └── WinDroidViewModel.kt          # App state management
 │
 ├── tweaks/
-│   ├── TweakConfig.kt                # ✨ Data model — XP/7/8/10/11 config
-│   └── AutounattendGenerator.kt      # ✨ Generates winnt.sif + autounattend.xml
+│   ├── TweakConfig.kt                # ✨ Data model — XP/7/8/10/11 config + BypassNRO
+│   └── AutounattendGenerator.kt      # ✨ Generates winnt.sif + autounattend.xml + ei.cfg
 │
 └── ui/
     ├── theme/                         # Colors, typography
     └── screens/
         ├── HomeScreen.kt              # ISO/USB picker + version selector
-        ├── TweaksScreen.kt            # All tweak toggles
+        ├── TweaksScreen.kt            # All tweak toggles, incl. online-requirement bypass
         ├── ProgressScreen.kt          # Flash progress + live log
         └── Navigation.kt              # Screen router
 ```
@@ -272,8 +281,4 @@ GPL-3.0 — same as [Rufus](https://github.com/pbatard/rufus), which inspired th
 
 ---
 
-<div align="center">
-
 *WinDroid — because flashing Windows shouldn't need a PC.*
-
-</div>
