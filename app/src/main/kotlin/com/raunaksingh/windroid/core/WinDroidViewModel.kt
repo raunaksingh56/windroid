@@ -71,13 +71,13 @@ class WinDroidViewModel(app: Application) : AndroidViewModel(app) {
             currentScreen = Screen.Progress
         )}
 
-        val xml = AutounattendGenerator.generate(s.tweakConfig)
+        val answerFiles = AutounattendGenerator.generateAll(s.tweakConfig)
 
         viewModelScope.launch(Dispatchers.IO) {
             usbWriter.flashToUsb(
                 isoUri          = s.isoUri,
                 usbUri          = s.usbUri,
-                autounattendXml = xml
+                answerFiles     = answerFiles
             ) { event ->
                 when (event) {
                     is FlashEvent.Progress -> _state.update { it.copy(

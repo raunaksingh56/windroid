@@ -147,7 +147,11 @@ object AutounattendGenerator {
             appendLine("""    <component name="Microsoft-Windows-Setup" processorArchitecture="$arch" publicKeyToken="$pkt" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">""")
 
             // Win11 hardware bypasses (registry in WinPE)
-            if (isWin11 && (cfg.bypassTPM || cfg.bypassSecureBoot || cfg.bypassRAMCheck || cfg.bypassCPUCheck)) {
+            val needsLabConfigBypass = isWin11 && (cfg.bypassTPM || cfg.bypassSecureBoot || cfg.bypassRAMCheck || cfg.bypassCPUCheck)
+            // Online account / network requirement bypass — Win 10 (2004+) and Win 11
+            val needsNroBypass = !isLegacy && cfg.bypassOnlineAccountRequirement
+
+            if (needsLabConfigBypass || needsNroBypass) {
                 appendLine("""      <RunSynchronous>""")
                 var order = 1
                 fun reg(path: String, value: String) {
@@ -156,10 +160,24 @@ object AutounattendGenerator {
                     appendLine("""          <Path>reg add "HKLM\SYSTEM\Setup\LabConfig" /v $path /t REG_DWORD /d $value /f</Path>""")
                     appendLine("""        </RunSynchronousCommand>""")
                 }
-                if (cfg.bypassTPM)        reg("BypassTPMCheck", "1")
-                if (cfg.bypassSecureBoot) reg("BypassSecureBootCheck", "1")
-                if (cfg.bypassRAMCheck)   reg("BypassRAMCheck", "1")
-                if (cfg.bypassCPUCheck)   reg("BypassCPUCheck", "1")
+                if (needsLabConfigBypass) {
+                    if (cfg.bypassTPM)        reg("BypassTPMCheck", "1")
+                    if (cfg.bypassSecureBoot) reg("BypassSecureBootCheck", "1")
+                    if (cfg.bypassRAMCheck)   reg("BypassRAMCheck", "1")
+                    if (cfg.bypassCPUCheck)   reg("BypassCPUCheck", "1")
+                }
+                if (needsNroBypass) {
+                    // Forces Setup to offer a local account instead of requiring
+                    // an internet connection / Microsoft account during OOBE.
+                    appendLine("""        <RunSynchronousCommand wcm:action="add">""")
+                    appendLine("""          <Order>${order++}</Order>""")
+                    appendLine("""          <Path>reg add "HKLM\SYSTEM\Setup\LabConfig" /v BypassNRO /t REG_DWORD /d 1 /f</Path>""")
+                    appendLine("""        </RunSynchronousCommand>""")
+                    appendLine("""        <RunSynchronousCommand wcm:action="add">""")
+                    appendLine("""          <Order>${order++}</Order>""")
+                    appendLine("""          <Path>reg add "HKLM\SYSTEM\Setup\LabConfig" /v BypassNROCheck /t REG_DWORD /d 1 /f</Path>""")
+                    appendLine("""        </RunSynchronousCommand>""")
+                }
                 appendLine("""      </RunSynchronous>""")
             }
 
@@ -228,6 +246,11 @@ object AutounattendGenerator {
                     appendLine("""        <SkipMachineOOBE>true</SkipMachineOOBE>""")
                     appendLine("""        <SkipUserOOBE>true</SkipUserOOBE>""")
                     appendLine("""        <ProtectYourPC>3</ProtectYourPC>""")
+                    if (cfg.bypassOnlineAccountRequirement) {
+                        // Pins setup to a wired/offline path so it doesn't loop
+                        // back into "Let's connect you to a network".
+                        appendLine("""        <NetworkLocation>Home</NetworkLocation>""")
+                    }
                 }
             }
             appendLine("""      </OOBE>""")

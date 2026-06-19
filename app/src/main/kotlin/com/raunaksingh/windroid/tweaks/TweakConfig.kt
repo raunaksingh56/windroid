@@ -64,6 +64,16 @@ data class TweakConfig(
     val bypassCPUCheck: Boolean             = true,
     val bypassDiskCheck: Boolean            = false,
 
+    // ── Windows 10 / 11 Online Account Requirement ────────────────────────────
+    /**
+     * Sets BypassNRO ("No Required Online") in WinPE. Without this, Setup forces
+     * an internet connection check during OOBE before it will offer a local
+     * account at all — distinct from skipMicrosoftAccount/HideOnlineAccountScreens,
+     * which only hide the account-creation UI but don't remove the network gate.
+     * Applies to Windows 10 (2004+) and Windows 11.
+     */
+    val bypassOnlineAccountRequirement: Boolean = true,
+
     // ── Windows 7 / 8 specific ────────────────────────────────────────────────
     /** Inject ei.cfg to force edition selection and skip edition-picker screen */
     val injectEiCfg: Boolean                = true,

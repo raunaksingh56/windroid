@@ -293,6 +293,14 @@ fun TweaksScreen(state: FlashState, vm: WinDroidViewModel) {
                         Spacer(Modifier.height(8.dp))
                         TweakTextField("Password (blank = no password)", cfg.localPassword, Icons.Rounded.Lock, isPassword = true) { cfg = cfg.copy(localPassword = it) }
                     }
+                    Spacer(Modifier.height(8.dp))
+                    TweakToggle(
+                        title    = "Bypass Internet/Network Requirement",
+                        subtitle = "Removes the \"You need an internet connection\" gate during OOBE (BypassNRO) — required for offline local-account setup on Win 10 2004+ / Win 11",
+                        checked  = cfg.bypassOnlineAccountRequirement,
+                        recommended = true,
+                        onToggle = { cfg = cfg.copy(bypassOnlineAccountRequirement = it) }
+                    )
                 }
 
                 // OOBE

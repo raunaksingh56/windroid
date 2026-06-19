@@ -42,7 +42,7 @@ class UsbWriter(private val context: Context) {
     fun flashToUsb(
         isoUri: Uri,
         usbUri: Uri,
-        autounattendXml: String,
+        answerFiles: Map<String, String>,
         onEvent: (FlashEvent) -> Unit
     ) {
         try {
@@ -67,11 +67,13 @@ class UsbWriter(private val context: Context) {
                 onLog = { onEvent(FlashEvent.Log(it)) }
             )
 
-            // ── Step 2: Inject autounattend.xml ────────────────────────────
+            // ── Step 2: Inject answer files (autounattend.xml / winnt.sif / ei.cfg) ─
             onEvent(FlashEvent.Progress(83, "Injecting Windows tweaks..."))
-            onEvent(FlashEvent.Log("Writing autounattend.xml..."))
-            safWriter.writeFile("autounattend.xml", autounattendXml.toByteArray())
-            onEvent(FlashEvent.Log("✓ autounattend.xml written"))
+            for ((relativePath, content) in answerFiles) {
+                onEvent(FlashEvent.Log("Writing $relativePath..."))
+                safWriter.writeFile(relativePath, content.toByteArray())
+                onEvent(FlashEvent.Log("✓ $relativePath written"))
+            }
 
             // ── Step 3: Hybrid boot setup (3-level, auto-detects root) ─────
             onEvent(FlashEvent.Progress(88, "Setting up hybrid boot..."))
@@ -154,8 +156,33 @@ class SafUsbWriter(private val context: Context, private val rootUri: Uri) {
     fun flush() { /* SAF auto-flushes */ }
 
     private fun getOrCreateDir(parent: Uri, name: String): Uri {
-        // Try to find existing dir first
-        // Simplified: use DocumentFile API
+        val childrenUri = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(
+            parent, android.provider.DocumentsContract.getDocumentId(parent)
+        )
+
+        resolver.query(
+            childrenUri,
+            arrayOf(
+                android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE
+            ),
+            null, null, null
+        )?.use { cursor ->
+            val idCol   = cursor.getColumnIndex(android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+            val nameCol = cursor.getColumnIndex(android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+            val mimeCol = cursor.getColumnIndex(android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE)
+            while (cursor.moveToNext()) {
+                val isDir = cursor.getString(mimeCol) == android.provider.DocumentsContract.Document.MIME_TYPE_DIR
+                if (isDir && cursor.getString(nameCol) == name) {
+                    return android.provider.DocumentsContract.buildDocumentUriUsingTree(
+                        parent, cursor.getString(idCol)
+                    )
+                }
+            }
+        }
+
+        // Not found — create it
         return android.provider.DocumentsContract.createDocument(
             resolver, parent,
             android.provider.DocumentsContract.Document.MIME_TYPE_DIR,
