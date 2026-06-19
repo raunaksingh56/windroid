@@ -153,6 +153,39 @@ class SafUsbWriter(private val context: Context, private val rootUri: Uri) {
         }
     }
 
+    /**
+     * Copies at most [maxBytes] from [stream] (does NOT close it — caller owns the
+     * stream, since it's shared across multiple chunk writes) into a new file.
+     * Used for splitting install.wim/.esd without buffering whole chunks in RAM.
+     * Returns the number of bytes actually written (may be less than maxBytes at EOF).
+     */
+    fun writeStreamChunk(relativePath: String, stream: InputStream, maxBytes: Long,
+                          onProgress: (Long) -> Unit = {}): Long {
+        val parts  = relativePath.replace("\\", "/").split("/")
+        var dirUri = rootUri
+
+        for (i in 0 until parts.size - 1) {
+            dirUri = getOrCreateDir(dirUri, parts[i])
+        }
+
+        val fileName = parts.last()
+        val fileUri  = createFile(dirUri, guessMime(fileName), fileName)
+
+        var written = 0L
+        resolver.openOutputStream(fileUri)?.use { out ->
+            val buf = ByteArray(UsbWriter.BUFFER_SIZE)
+            while (written < maxBytes) {
+                val toRead = minOf(buf.size.toLong(), maxBytes - written).toInt()
+                val read = stream.read(buf, 0, toRead)
+                if (read == -1) break
+                out.write(buf, 0, read)
+                written += read
+                onProgress(written)
+            }
+        }
+        return written
+    }
+
     fun flush() { /* SAF auto-flushes */ }
 
     private fun getOrCreateDir(parent: Uri, name: String): Uri {

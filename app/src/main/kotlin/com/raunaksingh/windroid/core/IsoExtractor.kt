@@ -64,9 +64,9 @@ class IsoExtractor(private val context: Context, private val isoUri: Uri) {
                 if (isInstallImage(entry) && entry.size > UsbWriter.MAX_FAT32_FILE_SIZE) {
                     val ext = if (entry.name.endsWith(".esd", ignoreCase = true)) "esd" else "wim"
                     onLog("${entry.name} is ${entry.size.toHumanSize()} — splitting for FAT32...")
-                    splitAndWrite(entryStream, entry.dirPath, ext, destination, onLog)
+                    entryStream.use { splitAndWrite(it, entry.dirPath, ext, destination, onLog) }
                 } else {
-                    destination.writeStream(entry.fullPath, entryStream, entry.size) {}
+                    entryStream.use { destination.writeStream(entry.fullPath, it, entry.size) {} }
                 }
                 processed++
             }
@@ -166,10 +166,8 @@ class IsoExtractor(private val context: Context, private val isoUri: Uri) {
             val name = when {
                 nameLen == 1 && rawName[0] == 0.toByte() -> "."   // current dir
                 nameLen == 1 && rawName[0] == 1.toByte() -> ".."  // parent dir
-                useJoliet -> String(rawName, Charsets.UTF_16BE)
-                    .trimEnd(';', '1', ' ').trimEnd('.')
-                else -> String(rawName, Charsets.US_ASCII)
-                    .split(";")[0].trimEnd('.')
+                useJoliet -> stripVersionSuffix(String(rawName, Charsets.UTF_16BE))
+                else -> stripVersionSuffix(String(rawName, Charsets.US_ASCII))
             }
 
             if (name != "." && name != "..") {
@@ -248,31 +246,38 @@ class IsoExtractor(private val context: Context, private val isoUri: Uri) {
         writer:      SafUsbWriter,
         onLog:       (String) -> Unit
     ) {
-        val buf        = ByteArray(8 * 1024 * 1024) // 8 MB buffer
-        var chunkIdx   = 1
-        var chunkBytes = 0L
-        var chunkBuf   = ByteArrayOutputStream()
-
-        fun flush() {
+        var chunkIdx = 1
+        while (true) {
             val fileName = if (chunkIdx == 1) "install.$ext" else "install$chunkIdx.$ext"
             val path     = if (dirPath.isEmpty()) fileName else "$dirPath/$fileName"
-            onLog("  Writing chunk $chunkIdx → $fileName (${chunkBuf.size().toLong().toHumanSize()})")
-            writer.writeFile(path, chunkBuf.toByteArray())
-        }
 
-        var read: Int
-        while (input.read(buf).also { read = it } != -1) {
-            if (chunkBytes + read > WIM_SPLIT_SIZE) {
-                flush(); chunkIdx++; chunkBytes = 0; chunkBuf = ByteArrayOutputStream()
-            }
-            chunkBuf.write(buf, 0, read)
-            chunkBytes += read
+            onLog("  Writing chunk $chunkIdx → $fileName (streaming, up to ${WIM_SPLIT_SIZE.toHumanSize()})...")
+            val written = writer.writeStreamChunk(path, input, WIM_SPLIT_SIZE)
+            onLog("  Chunk $chunkIdx complete (${written.toHumanSize()})")
+
+            if (written < WIM_SPLIT_SIZE) break  // hit EOF before filling this chunk
+            chunkIdx++
         }
-        if (chunkBuf.size() > 0) flush()
         onLog("  Split complete → $chunkIdx chunk(s)")
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
+
+    /**
+     * ISO 9660 filenames carry a trailing ";N" version number (e.g. "SETUP.EXE;1").
+     * Strip exactly that suffix — not any trailing digit/space/dot — so filenames
+     * that legitimately end in characters like '1' (e.g. "boot1.txt") survive intact.
+     */
+    private val versionSuffixRegex = Regex(";\\d+$")
+    private fun stripVersionSuffix(raw: String): String {
+        val noVersion = raw.replace(versionSuffixRegex, "")
+        // A single trailing dot with no extension after it (e.g. "FILENAME.") is
+        // a real ISO 9660 artifact for extensionless files — safe to drop only
+        // when it's the very last character.
+        return if (noVersion.endsWith(".") && !noVersion.dropLast(1).contains("."))
+            noVersion.dropLast(1)
+        else noVersion
+    }
 
     private fun isInstallImage(entry: IsoEntry) =
         entry.name.equals("install.wim", ignoreCase = true) ||
