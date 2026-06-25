@@ -35,20 +35,11 @@ data class BootResult(
 class HybridBootManager(private val context: Context) {
 
     companion object {
-        // Standard hybrid MBR bytes used by Rufus / syslinux
-        // This is the first 440 bytes of the MBR boot code (partition table preserved)
-        // Source: ms-sys / syslinux hybrid MBR — public domain
-        val HYBRID_MBR_BOOTCODE = byteArrayOf(
-            0x33, 0xC0.toByte(), 0x8E.toByte(), 0xD0.toByte(), 0xBC.toByte(), 0x00, 0x7C,
-            0x8E.toByte(), 0xC0.toByte(), 0x8E.toByte(), 0xD8.toByte(), 0xBE.toByte(), 0x00, 0x7C,
-            0xBF.toByte(), 0x00, 0x06, 0xB9.toByte(), 0x00, 0x02, 0xFC.toByte(), 0xF3.toByte(),
-            0xA4.toByte(), 0x50, 0x68, 0x1C, 0x06, 0xCB.toByte(), 0xFB.toByte(), 0xB9.toByte(),
-            0x04, 0x00, 0xBD.toByte(), 0xBE.toByte(), 0x07, 0x80.toByte(), 0x7E.toByte(), 0x00,
-            0x00, 0x7C, 0x0B, 0x0F, 0x85.toByte(), 0x0E, 0x01, 0x83.toByte(), 0xC5.toByte(),
-            0x10, 0xE2.toByte(), 0xF1.toByte(), 0xCD.toByte(), 0x18
-            // ... Full 440-byte MBR bootcode truncated for readability
-            // In production: load from assets/hybrid_mbr.bin
-        )
+        // Standard hybrid MBR boot code — loaded from assets/hybrid_mbr.bin at runtime.
+        // The embedded constant is intentionally empty: a truncated bootcode stub silently
+        // produces a non-functional MBR, which is worse than a clear error. If the asset
+        // is missing, loadMBRBootcode() throws so the caller falls back to Level 1 (UEFI).
+        val HYBRID_MBR_BOOTCODE = byteArrayOf()  // intentionally empty — see loadMBRBootcode()
 
         const val MBR_SIZE = 512
         const val BOOTCODE_SIZE = 440  // First 440 bytes = boot code (rest = partition table + signature)
@@ -158,9 +149,13 @@ class HybridBootManager(private val context: Context) {
 
     private fun readMBR(blockDevice: String): ByteArray? {
         return try {
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "dd if=$blockDevice bs=512 count=1"))
-            val mbr = process.inputStream.readBytes()
-            process.waitFor()
+            // FIX: drain stdout and stderr concurrently BEFORE waitFor() to avoid
+            // a deadlock where dd waits for its output buffer to be consumed while
+            // waitFor() waits for the process to exit — neither ever unblocks.
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c",
+                "dd if=$blockDevice bs=512 count=1 2>/dev/null"))
+            val mbr      = process.inputStream.readBytes()  // drain stdout first
+            process.waitFor()                                // then reap the process
             if (mbr.size >= MBR_SIZE) mbr.copyOf(MBR_SIZE) else null
         } catch (e: Exception) {
             null
@@ -183,28 +178,41 @@ class HybridBootManager(private val context: Context) {
     }
 
     private fun loadMBRBootcode(): ByteArray {
-        // In production: load from app assets (assets/hybrid_mbr.bin)
-        // This is the ms-sys Windows 7 MBR bootcode — public domain
-        return try {
-            context.assets.open("hybrid_mbr.bin").readBytes()
-        } catch (e: Exception) {
-            HYBRID_MBR_BOOTCODE  // fallback to embedded stub
+        // Must be shipped as assets/hybrid_mbr.bin (full 440-byte ms-sys/Windows 7 MBR bootcode).
+        // If the asset is missing we throw — applyHybridMBR() catches this and falls back to
+        // Level 1 (UEFI only), which is safer than writing a truncated/empty bootcode to disk.
+        return context.assets.open("hybrid_mbr.bin").readBytes().also { bytes ->
+            if (bytes.size < BOOTCODE_SIZE)
+                throw IOException("hybrid_mbr.bin is only ${bytes.size} bytes — expected $BOOTCODE_SIZE")
         }
     }
 
     private fun writeMBRRoot(blockDevice: String, mbr: ByteArray) {
-        // Write via su — pipe MBR bytes to dd
         val tmpFile = File(context.cacheDir, "windroid_mbr.bin")
         tmpFile.writeBytes(mbr)
 
-        val cmd = "dd if=${tmpFile.absolutePath} of=$blockDevice bs=446 count=1 conv=notrunc"
+        // FIX 1: bs=512 count=1 — writes all 512 bytes including the 0x55AA boot
+        //         signature at offset 510-511. The old bs=446 count=1 only wrote the
+        //         first 446 bytes, silently discarding the signature we set in
+        //         buildHybridMBR() — blank USB drives would never boot.
+        // FIX 2: redirect stderr to /dev/null in the shell command and use a
+        //         thread to drain stdout, avoiding a deadlock where dd blocks on
+        //         stderr buffer fill while waitFor() blocks waiting for exit.
+        val cmd = "dd if=${tmpFile.absolutePath} of=$blockDevice bs=512 count=1 conv=notrunc 2>/tmp/windroid_dd_err"
         val process = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
+
+        // Drain stdout on a background thread (dd doesn't produce stdout, but be safe)
+        val stdoutThread = Thread { process.inputStream.readBytes() }.also { it.start() }
         val exitCode = process.waitFor()
+        stdoutThread.join(2000)
 
         tmpFile.delete()
 
         if (exitCode != 0) {
-            val err = process.errorStream.bufferedReader().readText()
+            // Read the error we redirected to a temp file
+            val errProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat /tmp/windroid_dd_err"))
+            val err = errProcess.inputStream.bufferedReader().readText()
+            errProcess.waitFor()
             throw IOException("dd failed (exit $exitCode): $err")
         }
     }
@@ -262,17 +270,29 @@ class HybridBootManager(private val context: Context) {
     fun findUsbBlockDevice(onLog: (String) -> Unit): String? {
         return try {
             onLog("• Detecting USB block device...")
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "ls /dev/block/sd*"))
+
+            // FIX: Don't pick lastOrNull() from ls /dev/block/sd* — on phones with
+            // internal eMMC exposed as /dev/block/sdX, the last entry lexicographically
+            // could be internal storage, not the OTG drive.
+            // Instead, check /sys/block/sdX/removable — the kernel sets this to "1"
+            // for hot-plugged USB drives and "0" for fixed internal storage.
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c",
+                "for d in /sys/block/sd*/removable; do echo \"\$d \$(cat \$d)\"; done"))
             val output  = process.inputStream.bufferedReader().readText().trim()
             process.waitFor()
 
-            // Pick the last sdX device (most likely the OTG drive, not internal storage)
+            // Pick the first sdX where removable == 1
             val device = output.lines()
-                .filter { it.matches(Regex("/dev/block/sd[a-z]$")) }
-                .lastOrNull()
+                .filter { it.endsWith(" 1") }
+                .mapNotNull { line ->
+                    // line: "/sys/block/sda/removable 1"
+                    Regex("/sys/block/(sd[a-z]+)/removable").find(line)?.groupValues?.get(1)
+                }
+                .map { "/dev/block/$it" }
+                .firstOrNull()
 
-            if (device != null) onLog("  ✓ Found USB device: $device")
-            else onLog("  • Could not detect block device — skipping MBR write")
+            if (device != null) onLog("  ✓ Found removable USB device: $device")
+            else onLog("  • No removable block device found — skipping MBR write")
 
             device
         } catch (e: Exception) {

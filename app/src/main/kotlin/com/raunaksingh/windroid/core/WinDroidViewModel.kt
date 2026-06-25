@@ -62,22 +62,23 @@ class WinDroidViewModel(app: Application) : AndroidViewModel(app) {
         if (s.isoUri == null || s.usbUri == null) return
 
         _state.update { it.copy(
-            isFlashing = true,
+            isFlashing    = true,
             flashProgress = 0,
-            flashMessage = "Preparing...",
-            logLines = emptyList(),
-            isSuccess = false,
-            errorMessage = null,
+            flashMessage  = "Preparing...",
+            logLines      = emptyList(),
+            isSuccess     = false,
+            errorMessage  = null,
             currentScreen = Screen.Progress
         )}
 
-        val answerFiles = AutounattendGenerator.generateAll(s.tweakConfig)
-
         viewModelScope.launch(Dispatchers.IO) {
+            // Generate answer files on IO thread — keeps main thread free
+            val answerFiles = AutounattendGenerator.generateAll(s.tweakConfig)
+
             usbWriter.flashToUsb(
-                isoUri          = s.isoUri,
-                usbUri          = s.usbUri,
-                answerFiles     = answerFiles
+                isoUri      = s.isoUri,
+                usbUri      = s.usbUri,
+                answerFiles = answerFiles
             ) { event ->
                 when (event) {
                     is FlashEvent.Progress -> _state.update { it.copy(
@@ -97,8 +98,8 @@ class WinDroidViewModel(app: Application) : AndroidViewModel(app) {
                         currentScreen = Screen.Done
                     )}
                     is FlashEvent.Error -> _state.update { it.copy(
-                        isFlashing    = false,
-                        errorMessage  = event.message
+                        isFlashing   = false,  // FIX: was never set to false on error — UI stayed spinning
+                        errorMessage = event.message
                     )}
                 }
             }

@@ -494,7 +494,11 @@ fun StepCard(
 fun TweaksPreviewCard(config: com.raunaksingh.windroid.tweaks.TweakConfig, onClick: () -> Unit) {
     val activeTweaks = listOf(
         config.skipMicrosoftAccount,
+        config.bypassOnlineAccountRequirement,
         config.bypassTPM,
+        config.bypassSecureBoot,
+        config.bypassRAMCheck,
+        config.bypassCPUCheck,
         config.disableTelemetry,
         config.skipOOBE,
         config.disableCortana,

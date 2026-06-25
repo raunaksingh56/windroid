@@ -50,8 +50,10 @@ object AutounattendGenerator {
     }
 
     /** Backwards-compat helper — returns autounattend.xml content for Win 10/11 */
-    fun generate(cfg: TweakConfig): String = generateAll(cfg)["autounattend.xml"]
-        ?: generateAll(cfg).values.first()
+    fun generate(cfg: TweakConfig): String {
+        val all = generateAll(cfg)
+        return all["autounattend.xml"] ?: all.values.first()
+    }
 
     // ── Windows XP — winnt.sif ─────────────────────────────────────────────────
 
@@ -276,10 +278,18 @@ object AutounattendGenerator {
 
             appendLine("""    </component>""")
 
-            // Cortana (Win 10+ only)
+            // Cortana disable via FirstLogonCommands (Win 10+ only)
+            // The specialize pass doesn't have a native "disable Cortana" element —
+            // it must be done via a registry key set on first logon.
             if (!isLegacy && cfg.disableCortana) {
-                appendLine("""    <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="$arch" publicKeyToken="$pkt" language="neutral" versionScope="nonSxS">""")
-                appendLine("""      <DisableAutoDaylightTimeSet>false</DisableAutoDaylightTimeSet>""")
+                appendLine("""    <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="$arch" publicKeyToken="$pkt" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">""")
+                appendLine("""      <FirstLogonCommands>""")
+                appendLine("""        <SynchronousCommand wcm:action="add">""")
+                appendLine("""          <Order>1</Order>""")
+                appendLine("""          <CommandLine>reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\Windows Search" /v AllowCortana /t REG_DWORD /d 0 /f</CommandLine>""")
+                appendLine("""          <Description>Disable Cortana</Description>""")
+                appendLine("""        </SynchronousCommand>""")
+                appendLine("""      </FirstLogonCommands>""")
                 appendLine("""    </component>""")
             }
 
