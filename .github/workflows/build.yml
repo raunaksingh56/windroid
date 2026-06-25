@@ -1,11 +1,10 @@
-name: Build & Release APK
+name: build
 
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch:
 
 jobs:
   build:
@@ -22,78 +21,22 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: gradle
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # ── Build debug APK (always) ──────────────────────────────────────────
-      - name: Build debug APK
-        run: ./gradlew assembleDebug
-
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: WinDroid-debug
-          path: app/build/outputs/apk/debug/*.apk
-
-      # ── Build & sign release APK (only on push to main, not PRs) ─────────
-      - name: Decode keystore
-        if: github.event_name != 'pull_request'
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > keystore.jks
-
-      - name: Build release APK
-        if: github.event_name != 'pull_request'
+      - name: Build with Gradle
         run: ./gradlew assembleRelease
-        env:
-          SIGNING_STORE_FILE:     ${{ github.workspace }}/keystore.jks
-          SIGNING_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
-          SIGNING_KEY_ALIAS:      ${{ secrets.KEY_ALIAS }}
-          SIGNING_KEY_PASSWORD:   ${{ secrets.KEY_PASSWORD }}
-
-      - name: Upload release APK
-        if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v4
-        with:
-          name: WinDroid-release
-          path: app/build/outputs/apk/release/*.apk
-
-      # ── Auto-create GitHub Release on push to main ────────────────────────
-      - name: Get version name
-        if: github.event_name == 'push'
-        id: version
-        run: |
-          VERSION=$(grep versionName app/build.gradle.kts | sed 's/.*"\(.*\)".*/\1/' | head -1)
-          echo "name=${VERSION:-1.0}" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.name }}-${{ github.run_number }}
-          name: WinDroid v${{ steps.version.outputs.name }} (Build ${{ github.run_number }})
+          tag_name: v1.0.0-${{ github.run_number }}
+          name: WinDroid v1.0.0-${{ github.run_number }}
+          files: app/build/outputs/apk/release/*.apk
           body: |
-            ## WinDroid — Auto Build
-
-            Built from commit `${{ github.sha }}`
-
-            ### Download
-            - **WinDroid-release.apk** — signed, install directly on your phone
-            - **WinDroid-debug.apk** — debug build for testing
-
-            ### What's in this build
-            - Full ISO 9660 parser (no dependencies)
-            - Windows XP / 7 / 8 / 8.1 / 10 / 11 support
-            - autounattend.xml + winnt.sif generation
-            - Rootless USB write via Android SAF
-
-            ---
-            *Built by [raunaksingh56](https://github.com/raunaksingh56) · WinDroid*
-          files: |
-            app/build/outputs/apk/release/*.apk
-            app/build/outputs/apk/debug/*.apk
-          draft: false
-          prerelease: false
+            WinDroid - Bootable Windows USB Creator for Android
+            Created by Raunak Singh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
